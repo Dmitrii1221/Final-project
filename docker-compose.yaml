@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:15  # Используем конкретную версию для стабильности
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: db
+    ports:
+      - "5555:5555"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d tasksdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
+
+server:
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
