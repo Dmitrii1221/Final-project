@@ -1,35 +1,21 @@
 package config
 
 import (
-	"os"
-	"time"
+	"fmt"
+
+	"github.com/caarlos0/env/v11"
 )
 
-type ConfigServer struct {
-	Port         string
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
+type Config struct {
+	HTTPAddr string `env:"HTTP_ADDR" envDefault:":8080"`
+	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
+	Env      string `env:"APP_ENV"   envDefault:"local"` // local | dev | prod
 }
 
-func LoadFromEnv() *ConfigServer {
-	return &ConfigServer{
-		Port:         getEnv("HTTP_PORT", "1323"),
-		ReadTimeout:  getDurationEnv("READ_TIMEOUT", 30*time.Second),
-		WriteTimeout: getDurationEnv("WRITE_TIMEOUT", 30*time.Second),
+func Load() (Config, error) {
+	var cfg Config
+	if err := env.Parse(&cfg); err != nil {
+		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
-	if value := os.Getenv(key); value != "" {
-		if durationVal, err := time.ParseDuration(value); err == nil {
-			return durationVal
-		}
-	}
-	return defaultValue
+	return cfg, nil
 }
