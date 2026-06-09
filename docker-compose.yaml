@@ -1,25 +1,20 @@
 services:
   postgres:
-    image: postgres:15  # Используем конкретную версию для стабильности
+    image: postgres:15
+    container_name: budget-postgres
     environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-      POSTGRES_DB: db
+      POSTGRES_USER:     ${POSTGRES_USER:-budget}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-budget}
+      POSTGRES_DB:       ${POSTGRES_DB:-budget}
     ports:
-      - "5555:5555"
+      - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myuser -d tasksdb"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-budget}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
 
 volumes:
-  postgres_data:
-
-
-server:
-  port: 8080
-  read_timeout: 30s
-  write_timeout: 30s
+  pgdata:

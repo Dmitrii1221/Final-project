@@ -7,9 +7,10 @@ import (
 )
 
 type Config struct {
-	HTTPAddr string `env:"HTTP_ADDR" envDefault:":8080"`
-	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
-	Env      string `env:"APP_ENV"   envDefault:"local"` // local | dev | prod
+	HTTPAddr    string `env:"HTTP_ADDR" envDefault:":8080"`
+	LogLevel    string `env:"LOG_LEVEL" envDefault:"info"`
+	Env         string `env:"APP_ENV"   envDefault:"local"` // local | dev | prod
+	PostgresDSN string `env:"POSTGRES_DSN,required"`
 }
 
 func Load() (Config, error) {
