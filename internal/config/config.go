@@ -2,18 +2,25 @@ package config
 
 import (
 	"fmt"
+	"log"
 
-	"github.com/caarlos0/env/v11"
+	"github.com/caarlos0/env"
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
 	HTTPAddr    string `env:"HTTP_ADDR" envDefault:":8080"`
 	LogLevel    string `env:"LOG_LEVEL" envDefault:"info"`
-	Env         string `env:"APP_ENV"   envDefault:"local"` // local | dev | prod
+	Env         string `env:"APP_ENV"   envDefault:"local"`
 	PostgresDSN string `env:"POSTGRES_DSN,required"`
 }
 
 func Load() (Config, error) {
+	// Загружаем .env файл в системные переменные
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using system environment")
+	}
+
 	var cfg Config
 	if err := env.Parse(&cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config: %w", err)
