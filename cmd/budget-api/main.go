@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"log/slog"
 	"net/http"
@@ -10,8 +11,10 @@ import (
 	"final-project/internal/config"
 	"final-project/internal/logger"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
+	"github.com/pressly/goose/v3"
 )
 
 func main() {
@@ -56,8 +59,23 @@ func main() {
 		}
 	})
 
+	db, err := sql.Open("pgx", cfg.PostgresDSN)
+	if err != nil {
+		slog.Error("cannot open db", "err", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	goose.SetDialect("postgres")
+	if err := goose.Up(db, "migrations"); err != nil {
+		slog.Error("migrations failed", "err", err)
+		os.Exit(1)
+	}
+
+	slog.Info("migrations applied successfully")
+
 	if err := e.Start(cfg.HTTPAddr); err != nil {
-		log.Error("Ошибка запуска сервера:", "err", err)
+		slog.Error("Ошибка запуска сервера:", "err", err)
 		os.Exit(1)
 	}
 
