@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"final-project/internal/config"
+	"final-project/internal/domain"
 	"final-project/internal/logger"
 	budgetrepo "final-project/internal/repository/budget"
 	"log/slog"
@@ -39,7 +40,7 @@ func main() {
 	repo := budgetrepo.NewPostgres(pool)
 
 	for _, name := range []string{"alpha", "beta", "gamma"} {
-		b, err := repo.Insert(ctx, name)
+		b, err := repo.Insert(ctx, domain.Budget{Name: name})
 		if err != nil {
 			log.Error("insert", "name", name, "err", err)
 			os.Exit(1)
