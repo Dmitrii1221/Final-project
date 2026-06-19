@@ -3,16 +3,19 @@ package config
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/caarlos0/env"
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	HTTPAddr    string `env:"HTTP_ADDR" envDefault:":8080"`
-	LogLevel    string `env:"LOG_LEVEL" envDefault:"info"`
-	Env         string `env:"APP_ENV"   envDefault:"local"`
-	PostgresDSN string `env:"POSTGRES_DSN,required"`
+	HTTPAddr     string        `env:"HTTP_ADDR" envDefault:":8080"`
+	LogLevel     string        `env:"LOG_LEVEL" envDefault:"info"`
+	Env          string        `env:"APP_ENV"   envDefault:"local"`
+	PostgresDSN  string        `env:"POSTGRES_DSN,required"`
+	JWTSecret    string        `env:"JWT_SECRET,required"`
+	JWTAccessTTL time.Duration `env:"JWT_ACCESS_TTL" envDefault:"15m"`
 }
 
 func Load() (Config, error) {

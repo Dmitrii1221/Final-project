@@ -1,1 +1,4 @@
 .env
+.kilo/
+/budget-api
+/budget-consumer
