@@ -5,12 +5,20 @@ import (
 	"database/sql"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"time"
 
+	"final-project/api/proto/budgetpb"
 	"final-project/internal/auth"
+	budgetrepo "final-project/internal/repository/budget"
+	budgetperiodrepo "final-project/internal/repository/budget_period"
+	periodlimitrepo "final-project/internal/repository/period_limit"
+	rolerepo "final-project/internal/repository/role"
+	userbudgetrolerepo "final-project/internal/repository/user_budget_role"
 	userrepo "final-project/internal/repository/user"
+	grpctransport "final-project/internal/transport/grpc"
 
 	"final-project/internal/config"
 	"final-project/internal/logger"
@@ -20,6 +28,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/pressly/goose/v3"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -71,6 +80,31 @@ func main() {
 
 	authHandler := auth.NewHandler(userRepo, cfg.JWTSecret, cfg.JWTAccessTTL)
 
+	// ---------- GRPC server ----------
+	lis, err := net.Listen("tcp", cfg.GRPCAddr)
+	if err != nil {
+		slog.Error("grpc listen", "err", err)
+		os.Exit(1)
+	}
+
+	budgetRepo := budgetrepo.NewPostgres(pool)
+	periodRepo := budgetperiodrepo.NewPostgres(pool)
+	periodLimitRepo := periodlimitrepo.NewPostgres(pool)
+	roleRepo := rolerepo.NewPostgres(pool)
+	userBudgetRoleRepo := userbudgetrolerepo.NewPostgres(pool)
+	budgetServer := grpctransport.NewBudgetServer(budgetRepo, periodRepo, periodLimitRepo, roleRepo, userBudgetRoleRepo)
+
+	grpcServer := grpc.NewServer()
+	budgetpb.RegisterBudgetServiceServer(grpcServer, budgetServer)
+
+	go func() {
+		slog.Info("starting gRPC server", "addr", cfg.GRPCAddr)
+		if err := grpcServer.Serve(lis); err != nil {
+			slog.Error("grpc server error", "err", err)
+			os.Exit(1)
+		}
+	}()
+
 	// ---------- HTTP server ----------
 
 	e := echo.New()
@@ -111,4 +145,5 @@ func main() {
 		slog.Error("server error", "err", err)
 		os.Exit(1)
 	}
+
 }
