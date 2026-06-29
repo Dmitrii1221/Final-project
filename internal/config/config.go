@@ -16,6 +16,7 @@ type Config struct {
 	PostgresDSN  string        `env:"POSTGRES_DSN,required"`
 	JWTSecret    string        `env:"JWT_SECRET,required"`
 	JWTAccessTTL time.Duration `env:"JWT_ACCESS_TTL" envDefault:"15m"`
+	GRPCAddr     string        `env:"GRPC_ADDR" envDefault:":9090"`
 }
 
 func Load() (Config, error) {
