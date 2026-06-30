@@ -14,11 +14,14 @@ import (
 	"final-project/internal/auth"
 	budgetrepo "final-project/internal/repository/budget"
 	budgetperiodrepo "final-project/internal/repository/budget_period"
+	currencyrepo "final-project/internal/repository/currency"
 	periodlimitrepo "final-project/internal/repository/period_limit"
 	rolerepo "final-project/internal/repository/role"
-	userbudgetrolerepo "final-project/internal/repository/user_budget_role"
+	spendingrepo "final-project/internal/repository/spending"
 	userrepo "final-project/internal/repository/user"
+	userbudgetrolerepo "final-project/internal/repository/user_budget_role"
 	grpctransport "final-project/internal/transport/grpc"
+	httptransport "final-project/internal/transport/http"
 
 	"final-project/internal/config"
 	"final-project/internal/logger"
@@ -75,10 +78,15 @@ func main() {
 	// ---------- Repositories ----------
 
 	userRepo := userrepo.NewPostgres(pool)
+	budgetRepo := budgetrepo.NewPostgres(pool)
+	periodRepo := budgetperiodrepo.NewPostgres(pool)
 
 	// ---------- Handlers ----------
 
 	authHandler := auth.NewHandler(userRepo, cfg.JWTSecret, cfg.JWTAccessTTL)
+	spendingRepo := spendingrepo.NewPostgres(pool)
+	currencyRepo := currencyrepo.NewPostgres(pool)
+	budgetHTTPHandler := httptransport.NewBudgetHandler(budgetRepo, periodRepo, spendingRepo, currencyRepo)
 
 	// ---------- GRPC server ----------
 	lis, err := net.Listen("tcp", cfg.GRPCAddr)
@@ -87,8 +95,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	budgetRepo := budgetrepo.NewPostgres(pool)
-	periodRepo := budgetperiodrepo.NewPostgres(pool)
 	periodLimitRepo := periodlimitrepo.NewPostgres(pool)
 	roleRepo := rolerepo.NewPostgres(pool)
 	userBudgetRoleRepo := userbudgetrolerepo.NewPostgres(pool)
@@ -132,12 +138,24 @@ func main() {
 	e.GET("/ping", func(c echo.Context) error {
 		return c.String(http.StatusOK, "pong")
 	})
+	e.GET("/readyz", func(c echo.Context) error {
+		if err := pool.Ping(ctx); err != nil {
+			return c.String(http.StatusServiceUnavailable, "not ready")
+		}
+		return c.String(http.StatusOK, "ready")
+	})
 
 	// Auth routes
 	api := e.Group("/api/v1/auth")
 	api.POST("/register", authHandler.Register)
 	api.POST("/login", authHandler.Login)
 	api.GET("/me", authHandler.Me, auth.Middleware([]byte(cfg.JWTSecret)))
+
+	// Budget routes
+	b := e.Group("/api/v1/budgets", auth.Middleware([]byte(cfg.JWTSecret)))
+	b.GET("/:id", budgetHTTPHandler.GetBudget)
+	b.GET("/:id/periods/:period_id", budgetHTTPHandler.GetPeriod)
+	b.GET("/:id/stats", budgetHTTPHandler.GetStats)
 
 	// Start
 	slog.Info("starting http server", "addr", cfg.HTTPAddr, "env", cfg.Env)
