@@ -81,3 +81,33 @@ func (r *PostgresRepo) GetByUserAndBudget(ctx context.Context, userID, budgetID 
 	}
 	return out, nil
 }
+
+func (r *PostgresRepo) GetByUserID(ctx context.Context, userID int64) ([]domain.UserBudgetRole, error) {
+	query, args, err := psql.
+		Select("user_id", "budget_id", "role_id").
+		From("user_budget_roles").
+		Where("user_id = ?", userID).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build select: %w", err)
+	}
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("exec select: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]domain.UserBudgetRole, 0)
+	for rows.Next() {
+		var ubr domain.UserBudgetRole
+		if err := rows.Scan(&ubr.UserID, &ubr.BudgetID, &ubr.RoleID); err != nil {
+			return nil, fmt.Errorf("Scan: %w", err)
+		}
+		out = append(out, ubr)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows err: %w", err)
+	}
+	return out, nil
+}

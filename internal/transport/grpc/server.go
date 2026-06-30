@@ -10,6 +10,7 @@ import (
 type (
 	budgetRepo interface {
 		Insert(ctx context.Context, budget domain.Budget) (domain.Budget, error)
+		GetByID(ctx context.Context, id int64) (domain.Budget, error)
 	}
 
 	periodRepo interface {
@@ -27,6 +28,7 @@ type (
 
 	userBudgetRoleRepo interface {
 		Grant(ctx context.Context, ubr domain.UserBudgetRole) error
+		GetByUserID(ctx context.Context, userID int64) ([]domain.UserBudgetRole, error)
 	}
 )
 
