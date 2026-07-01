@@ -14,6 +14,7 @@ import (
 	rolerepo "final-project/internal/repository/role"
 	spendingrepo "final-project/internal/repository/spending"
 	userbudgetrolerepo "final-project/internal/repository/user_budget_role"
+	"final-project/internal/service"
 	kafkatransport "final-project/internal/transport/kafka"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -37,7 +38,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	handler := kafkatransport.NewHandler(
+	svc := service.NewSpendingService(
 		currencyrepo.NewPostgres(pool),
 		budgetperiodrepo.NewPostgres(pool),
 		periodlimitrepo.NewPostgres(pool),
@@ -46,6 +47,7 @@ func main() {
 		userbudgetrolerepo.NewPostgres(pool),
 		rolerepo.NewPostgres(pool),
 	)
+	handler := kafkatransport.NewHandler(svc)
 	consumer := kafkatransport.New(
 		cfg.KafkaBrokers,
 		cfg.KafkaTopicSpendings,

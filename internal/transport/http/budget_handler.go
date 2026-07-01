@@ -7,9 +7,12 @@ import (
 	"strconv"
 	"time"
 
+	"final-project/internal/auth"
 	"final-project/internal/domain"
+	"final-project/internal/service"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shopspring/decimal"
 )
 
 type BudgetHandler struct {
@@ -25,6 +28,7 @@ type BudgetHandler struct {
 	currencyRepo interface {
 		GetByCode(ctx context.Context, code string) (domain.Currency, error)
 	}
+	spendingService *service.SpendingService
 }
 
 func NewBudgetHandler(budgetRepo interface {
@@ -34,15 +38,17 @@ func NewBudgetHandler(budgetRepo interface {
 }, spendingRepo interface {
 	ListByBudgetID(ctx context.Context, budgetID int64, currencyID *int64, periodID *int64, from, to *time.Time) ([]domain.Spending, error)
 },
-	currencyRepo interface {
+currencyRepo interface {
 		GetByCode(ctx context.Context, code string) (domain.Currency, error)
-	}) *BudgetHandler {
+},
+spendingService  *service.SpendingService,
+) *BudgetHandler {
 	return &BudgetHandler{budgetRepo: budgetRepo,
 		periodRepo:   periodRepo,
 		spendingRepo: spendingRepo,
 		currencyRepo: currencyRepo,
+		spendingService: spendingService,
 	}
-
 }
 
 func (h *BudgetHandler) GetBudget(c echo.Context) error {
@@ -140,4 +146,50 @@ func (h *BudgetHandler) GetPeriod(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, period)
+}
+
+func (h *BudgetHandler) PostSpending(c echo.Context) error {
+	var req struct {
+		IdempotencyKey string `json:"idempotency_key"`
+		CurrencyCode   string `json:"currency_code"`
+		Amount         string `json:"amount"`
+		SpentAt        string `json:"spent_at"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid body")
+	}
+
+	budgetID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid budget id")
+	}
+
+	claims := auth.ClaimsFromContext(c)
+	if claims == nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+
+	spentAt, err := time.Parse(time.RFC3339, req.SpentAt)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid spent_at")
+	}
+
+	amount, err := decimal.NewFromString(req.Amount)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid amount")
+	}
+
+	spending, err := h.spendingService.Process(c.Request().Context(), service.SpendCommand{
+		BudgetID:       budgetID,
+		CurrencyCode:   req.CurrencyCode,
+		Amount:         amount,
+		SpentAt:        spentAt,
+		UserID:         claims.UserID,
+		IdempotencyKey: req.IdempotencyKey,
+	})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusUnprocessableEntity, err.Error())
+	}
+
+	return c.JSON(http.StatusCreated, spending)
 }

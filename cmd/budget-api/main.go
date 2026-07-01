@@ -15,11 +15,13 @@ import (
 	budgetrepo "final-project/internal/repository/budget"
 	budgetperiodrepo "final-project/internal/repository/budget_period"
 	currencyrepo "final-project/internal/repository/currency"
+	periodbalancerepo "final-project/internal/repository/period_balance"
 	periodlimitrepo "final-project/internal/repository/period_limit"
 	rolerepo "final-project/internal/repository/role"
 	spendingrepo "final-project/internal/repository/spending"
 	userrepo "final-project/internal/repository/user"
 	userbudgetrolerepo "final-project/internal/repository/user_budget_role"
+	"final-project/internal/service"
 	grpctransport "final-project/internal/transport/grpc"
 	httptransport "final-project/internal/transport/http"
 
@@ -86,7 +88,16 @@ func main() {
 	authHandler := auth.NewHandler(userRepo, cfg.JWTSecret, cfg.JWTAccessTTL)
 	spendingRepo := spendingrepo.NewPostgres(pool)
 	currencyRepo := currencyrepo.NewPostgres(pool)
-	budgetHTTPHandler := httptransport.NewBudgetHandler(budgetRepo, periodRepo, spendingRepo, currencyRepo)
+	spendingService := service.NewSpendingService(
+		currencyrepo.NewPostgres(pool),
+		budgetperiodrepo.NewPostgres(pool),
+		periodlimitrepo.NewPostgres(pool),
+		spendingrepo.NewPostgres(pool),
+		periodbalancerepo.NewPostgres(pool),
+		userbudgetrolerepo.NewPostgres(pool),
+		rolerepo.NewPostgres(pool),
+	)
+	budgetHTTPHandler := httptransport.NewBudgetHandler(budgetRepo, periodRepo, spendingRepo, currencyRepo, spendingService)
 
 	// ---------- GRPC server ----------
 	lis, err := net.Listen("tcp", cfg.GRPCAddr)
@@ -156,6 +167,17 @@ func main() {
 	b.GET("/:id", budgetHTTPHandler.GetBudget)
 	b.GET("/:id/periods/:period_id", budgetHTTPHandler.GetPeriod)
 	b.GET("/:id/stats", budgetHTTPHandler.GetStats)
+	b.POST("/:id/spendings", budgetHTTPHandler.PostSpending)
+	//Пример запроса создания траты
+	// 	curl -X POST http://localhost:1323/api/v1/budgets/1/spendings \
+	//   -H "Authorization: Bearer <token>" \
+	//   -H "Content-Type: application/json" \
+	//   -d '{
+	//     "idempotency_key": "uniq-1",
+	//     "currency_code": "USD",
+	//     "amount": "50.5",
+	//     "spent_at": "2026-06-28T12:00:00Z"
+	//   }'
 
 	// Start
 	slog.Info("starting http server", "addr", cfg.HTTPAddr, "env", cfg.Env)
