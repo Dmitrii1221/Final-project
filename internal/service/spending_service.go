@@ -29,7 +29,10 @@ type SpendingService struct {
 		Insert(ctx context.Context, s domain.Spending) (domain.Spending, error)
 		GetByIdempotencyKey(ctx context.Context, budgetID int64, key string) (domain.Spending, error)
 	}
-	periodBalanceRepo  interface{ Upsert(ctx context.Context, pb domain.PeriodBalance) (domain.PeriodBalance, error) }
+	periodBalanceRepo  interface {
+		Upsert(ctx context.Context, pb domain.PeriodBalance) (domain.PeriodBalance, error)
+		GetByPeriodAndCurrency(ctx context.Context, periodID, currencyID int64) (domain.PeriodBalance, error)
+	}
 	userBudgetRoleRepo interface{ GetByUserAndBudget(ctx context.Context, userID, budgetID int64) ([]domain.UserBudgetRole, error) }
 	roleRepo           interface{ GetByCode(ctx context.Context, code string) (domain.Role, error) }
 }
@@ -42,7 +45,10 @@ func NewSpendingService(
 		Insert(ctx context.Context, s domain.Spending) (domain.Spending, error)
 		GetByIdempotencyKey(ctx context.Context, budgetID int64, key string) (domain.Spending, error)
 	},
-	periodBalanceRepo interface{ Upsert(ctx context.Context, pb domain.PeriodBalance) (domain.PeriodBalance, error) },
+	periodBalanceRepo interface {
+		Upsert(ctx context.Context, pb domain.PeriodBalance) (domain.PeriodBalance, error)
+		GetByPeriodAndCurrency(ctx context.Context, periodID, currencyID int64) (domain.PeriodBalance, error)
+	},
 	userBudgetRoleRepo interface{ GetByUserAndBudget(ctx context.Context, userID, budgetID int64) ([]domain.UserBudgetRole, error) },
 	roleRepo interface{ GetByCode(ctx context.Context, code string) (domain.Role, error) },
 ) *SpendingService {
@@ -79,7 +85,7 @@ func (s *SpendingService) Process(ctx context.Context, cmd SpendCommand) (domain
 		return domain.Spending{}, fmt.Errorf("no active period for budget %d at %s", cmd.BudgetID, cmd.SpentAt)
 	}
 
-	_, err = s.periodLimitRepo.GetByPeriodAndCurrency(ctx, activePeriod.ID, currency.ID)
+	periodLimit, err := s.periodLimitRepo.GetByPeriodAndCurrency(ctx, activePeriod.ID, currency.ID)
 	if err != nil {
 		return domain.Spending{}, fmt.Errorf("currency %s not allowed in period %d", cmd.CurrencyCode, activePeriod.ID)
 	}
@@ -123,10 +129,18 @@ func (s *SpendingService) Process(ctx context.Context, cmd SpendCommand) (domain
 		return domain.Spending{}, fmt.Errorf("insert spending: %w", err)
 	}
 
+	currentBalance, err := s.periodBalanceRepo.GetByPeriodAndCurrency(ctx, activePeriod.ID, currency.ID)
+	var newRemaining decimal.Decimal
+	if err != nil {
+		newRemaining = periodLimit.LimitAmount.Sub(cmd.Amount)
+	} else {
+		newRemaining = currentBalance.Remaining.Sub(cmd.Amount)
+	}
+
 	_, err = s.periodBalanceRepo.Upsert(ctx, domain.PeriodBalance{
 		PeriodID:   activePeriod.ID,
 		CurrencyID: currency.ID,
-		Remaining:  cmd.Amount,
+		Remaining:  newRemaining,
 	})
 	if err != nil {
 		return domain.Spending{}, fmt.Errorf("update balance: %w", err)
