@@ -5,12 +5,25 @@ import (
 	"database/sql"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"time"
 
+	"final-project/api/proto/budgetpb"
 	"final-project/internal/auth"
+	budgetrepo "final-project/internal/repository/budget"
+	budgetperiodrepo "final-project/internal/repository/budget_period"
+	currencyrepo "final-project/internal/repository/currency"
+	periodbalancerepo "final-project/internal/repository/period_balance"
+	periodlimitrepo "final-project/internal/repository/period_limit"
+	rolerepo "final-project/internal/repository/role"
+	spendingrepo "final-project/internal/repository/spending"
 	userrepo "final-project/internal/repository/user"
+	userbudgetrolerepo "final-project/internal/repository/user_budget_role"
+	"final-project/internal/service"
+	grpctransport "final-project/internal/transport/grpc"
+	httptransport "final-project/internal/transport/http"
 
 	"final-project/internal/config"
 	"final-project/internal/logger"
@@ -20,6 +33,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/pressly/goose/v3"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -66,10 +80,47 @@ func main() {
 	// ---------- Repositories ----------
 
 	userRepo := userrepo.NewPostgres(pool)
+	budgetRepo := budgetrepo.NewPostgres(pool)
+	periodRepo := budgetperiodrepo.NewPostgres(pool)
 
 	// ---------- Handlers ----------
 
 	authHandler := auth.NewHandler(userRepo, cfg.JWTSecret, cfg.JWTAccessTTL)
+	spendingRepo := spendingrepo.NewPostgres(pool)
+	currencyRepo := currencyrepo.NewPostgres(pool)
+	spendingService := service.NewSpendingService(
+		currencyrepo.NewPostgres(pool),
+		budgetperiodrepo.NewPostgres(pool),
+		periodlimitrepo.NewPostgres(pool),
+		spendingrepo.NewPostgres(pool),
+		periodbalancerepo.NewPostgres(pool),
+		userbudgetrolerepo.NewPostgres(pool),
+		rolerepo.NewPostgres(pool),
+	)
+	budgetHTTPHandler := httptransport.NewBudgetHandler(budgetRepo, periodRepo, spendingRepo, currencyRepo, spendingService)
+
+	// ---------- GRPC server ----------
+	lis, err := net.Listen("tcp", cfg.GRPCAddr)
+	if err != nil {
+		slog.Error("grpc listen", "err", err)
+		os.Exit(1)
+	}
+
+	periodLimitRepo := periodlimitrepo.NewPostgres(pool)
+	roleRepo := rolerepo.NewPostgres(pool)
+	userBudgetRoleRepo := userbudgetrolerepo.NewPostgres(pool)
+	budgetServer := grpctransport.NewBudgetServer(budgetRepo, periodRepo, periodLimitRepo, roleRepo, userBudgetRoleRepo)
+
+	grpcServer := grpc.NewServer()
+	budgetpb.RegisterBudgetServiceServer(grpcServer, budgetServer)
+
+	go func() {
+		slog.Info("starting gRPC server", "addr", cfg.GRPCAddr)
+		if err := grpcServer.Serve(lis); err != nil {
+			slog.Error("grpc server error", "err", err)
+			os.Exit(1)
+		}
+	}()
 
 	// ---------- HTTP server ----------
 
@@ -98,6 +149,12 @@ func main() {
 	e.GET("/ping", func(c echo.Context) error {
 		return c.String(http.StatusOK, "pong")
 	})
+	e.GET("/readyz", func(c echo.Context) error {
+		if err := pool.Ping(ctx); err != nil {
+			return c.String(http.StatusServiceUnavailable, "not ready")
+		}
+		return c.String(http.StatusOK, "ready")
+	})
 
 	// Auth routes
 	api := e.Group("/api/v1/auth")
@@ -105,10 +162,28 @@ func main() {
 	api.POST("/login", authHandler.Login)
 	api.GET("/me", authHandler.Me, auth.Middleware([]byte(cfg.JWTSecret)))
 
+	// Budget routes
+	b := e.Group("/api/v1/budgets", auth.Middleware([]byte(cfg.JWTSecret)))
+	b.GET("/:id", budgetHTTPHandler.GetBudget)
+	b.GET("/:id/periods/:period_id", budgetHTTPHandler.GetPeriod)
+	b.GET("/:id/stats", budgetHTTPHandler.GetStats)
+	b.POST("/:id/spendings", budgetHTTPHandler.PostSpending)
+	//Пример запроса создания траты
+	// 	curl -X POST http://localhost:1323/api/v1/budgets/1/spendings \
+	//   -H "Authorization: Bearer <token>" \
+	//   -H "Content-Type: application/json" \
+	//   -d '{
+	//     "idempotency_key": "uniq-1",
+	//     "currency_code": "USD",
+	//     "amount": "50.5",
+	//     "spent_at": "2026-06-28T12:00:00Z"
+	//   }'
+
 	// Start
 	slog.Info("starting http server", "addr", cfg.HTTPAddr, "env", cfg.Env)
 	if err := e.Start(cfg.HTTPAddr); err != nil {
 		slog.Error("server error", "err", err)
 		os.Exit(1)
 	}
+
 }
