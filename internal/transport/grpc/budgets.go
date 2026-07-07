@@ -52,3 +52,30 @@ func (s *BudgetServer) ListSpendableBudgets(ctx context.Context, req *budgetpb.L
 
 	return &budgetpb.ListAvailableBudgetsResponse{Budgets: out}, nil
 }
+
+func (s *BudgetServer) ListAvailableBudgets(ctx context.Context, req *budgetpb.ListAvailableBudgetsRequest) (*budgetpb.ListAvailableBudgetsResponse, error) {
+
+	roles, err := s.userBudgetRoleRepo.GetByUserID(ctx, req.UserId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "list roles failed")
+	}
+
+	budgetIDs := make(map[int64]struct{})
+	for _, r := range roles {
+		budgetIDs[r.BudgetID] = struct{}{}
+	}
+
+	out := make([]*budgetpb.Budget, 0, len(budgetIDs))
+	for id := range budgetIDs {
+		b, err := s.budgetRepo.GetByID(ctx, id)
+		if err != nil {
+			continue
+		}
+		out = append(out, &budgetpb.Budget{
+			Id:   b.ID,
+			Name: b.Name,
+		})
+	}
+
+	return &budgetpb.ListAvailableBudgetsResponse{Budgets: out}, nil
+}

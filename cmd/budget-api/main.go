@@ -111,7 +111,7 @@ func main() {
 	userBudgetRoleRepo := userbudgetrolerepo.NewPostgres(pool)
 	budgetServer := grpctransport.NewBudgetServer(budgetRepo, periodRepo, periodLimitRepo, roleRepo, userBudgetRoleRepo)
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpctransport.AuthInterceptor([]byte(cfg.JWTSecret))))
 	budgetpb.RegisterBudgetServiceServer(grpcServer, budgetServer)
 
 	go func() {
