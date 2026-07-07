@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package budget.v1;
+
+option go_package = "api/proto/budgetpb";
+
+import "google/protobuf/timestamp.proto";
+service BudgetService {
+  rpc CreateBudget(CreateBudgetRequest) returns (Budget);
+  rpc ListAvailableBudgets(ListAvailableBudgetsRequest) returns (ListAvailableBudgetsResponse);
+  rpc CreatePeriod(CreatePeriodRequest) returns (BudgetPeriod);
+  rpc ListPeriods(ListPeriodsRequest) returns (ListPeriodsResponse);
+  rpc SetPeriodLimit(SetPeriodLimitRequest) returns (PeriodLimit);
+  rpc GrantRole(GrantRoleRequest) returns (GrantRoleResponse);
+}
+
+message Budget {
+  int64 id = 1;
+  string name = 2;
+  int64 owner_user_id = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+}
+
+message BudgetPeriod {
+  int64 id = 1;
+  int64 budget_id = 2;
+  google.protobuf.Timestamp period_start = 3;
+  google.protobuf.Timestamp period_end = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message PeriodLimit {
+  int64 id = 1;
+  int64 period_id = 2;
+  int64 currency_id = 3;
+  string limit_amount = 4;
+}
+
+message CreateBudgetRequest {
+  string name = 1;
+}
+
+message ListAvailableBudgetsRequest {
+  int64 user_id = 1;
+}
+
+message ListAvailableBudgetsResponse {
+  repeated Budget budgets = 1;
+}
+
+message CreatePeriodRequest {
+  int64 budget_id = 1;
+  google.protobuf.Timestamp period_start = 2;
+  google.protobuf.Timestamp period_end = 3;
+}
+
+message ListPeriodsRequest {
+  int64 budget_id = 1;
+}
+
+message ListPeriodsResponse {
+  repeated BudgetPeriod periods = 1;
+}
+
+message SetPeriodLimitRequest {
+  int64 period_id = 1;
+  int64 currency_id = 2;
+  string limit_amount = 3;
+}
+
+message GrantRoleRequest {
+  int64 user_id = 1;
+  int64 budget_id = 2;
+  string role_code = 3;
+}
+
+message GrantRoleResponse {
+  bool success = 1;
+}

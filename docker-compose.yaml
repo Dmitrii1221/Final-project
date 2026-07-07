@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:15
+    image: postgres:16
     container_name: budget-postgres
     environment:
       POSTGRES_USER:     ${POSTGRES_USER:-budget}
@@ -15,6 +15,67 @@ services:
       interval: 3s
       timeout: 3s
       retries: 10
+
+  redpanda:
+    image: docker.redpanda.com/vectorized/redpanda:v24.2.18
+    container_name: budget-redpanda
+    ports:
+      - "9092:9092"
+      - "9644:9644"
+    command:
+      - redpanda
+      - start
+      - --smp 1
+      - --memory 512M
+      - --overprovisioned
+      - --node-id 0
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  budget-api:
+    build: .
+    container_name: budget-api
+    command: ["budget-api"]
+    ports:
+      - "${HTTP_ADDR:-1323}:1323"
+      - "${GRPC_ADDR:-9090}:9090"
+    environment:
+      POSTGRES_DSN:     postgres://budget:budget@postgres:5432/budget?sslmode=disable
+      HTTP_ADDR:        :1323
+      GRPC_ADDR:        :9090
+      LOG_LEVEL:        info
+      APP_ENV:          production
+      JWT_SECRET:       ${JWT_SECRET}
+      JWT_ACCESS_TTL:   ${JWT_ACCESS_TTL:-15m}
+      KAFKA_BROKERS:    redpanda:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  budget-consumer:
+    build: .
+    container_name: budget-consumer
+    command: ["budget-consumer"]
+    environment:
+      POSTGRES_DSN:               postgres://budget:budget@postgres:5432/budget?sslmode=disable
+      LOG_LEVEL:                  info
+      APP_ENV:                    production
+      KAFKA_BROKERS:              redpanda:29092
+      KAFKA_TOPIC_SPENDINGS:      spendings
+      KAFKA_TOPIC_DLQ:            spendings.dlq
+      KAFKA_GROUP_ID:             budget-consumer
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pgdata:

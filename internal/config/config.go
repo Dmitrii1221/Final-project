@@ -16,6 +16,11 @@ type Config struct {
 	PostgresDSN  string        `env:"POSTGRES_DSN,required"`
 	JWTSecret    string        `env:"JWT_SECRET,required"`
 	JWTAccessTTL time.Duration `env:"JWT_ACCESS_TTL" envDefault:"15m"`
+	GRPCAddr            string `env:"GRPC_ADDR" envDefault:":9090"`
+	KafkaBrokers        string `env:"KAFKA_BROKERS"        envDefault:"localhost:9092"`
+	KafkaTopicSpendings string `env:"KAFKA_TOPIC_SPENDINGS" envDefault:"spendings"`
+	KafkaTopicDLQ       string `env:"KAFKA_TOPIC_DLQ"       envDefault:"spendings.dlq"`
+	KafkaGroupID        string `env:"KAFKA_GROUP_ID"        envDefault:"budget-consumer"`
 }
 
 func Load() (Config, error) {
